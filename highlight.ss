@@ -22,36 +22,35 @@
   (call/cc
     (lambda (k)
       (with-exception-handler
-	  (lambda (e) (k '()))
+	(lambda (e) (k '()))
 	(lambda ()
-	  (let ((arity (procedure-arity-mask (eval symbol))))
-	    `((,symbol . ,(max 0 (+ -2 (bitwise-length arity)))))))))))
+	  (let ((a (procedure-arity-mask (eval symbol))))
+	    `((,symbol . 0))))))))
 
 (define (analyze-syntax symbol)
   (call/cc
     (lambda (k)
       (with-exception-handler
-	  (lambda (e)
-	    (k (case symbol
-		 ((let let* letrec define lambda let-values define-values
-		       library define-record-type fields else => if)
-		  '())
-		 ((cond import export or and)
-		  `((,symbol . 0)))
-		 (else `((,symbol . 1))))))
+	(lambda (e)
+	  (k (case symbol
+	       ((fields let let* letrec define lambda let-values define-values
+			library define-record-type else => if syntax-case
+			syntax-rules meta)
+		'())
+	       ((and import cond export or)
+		`((,symbol . 0)))
+	       (else `((,symbol . 1))))))
 	(lambda ()
 	  (eval symbol)
 	  '())))))
 
 (define (decide-highlighting-rules symbols)
-  (let* ((procedures (fold-right append '() (map analyze-procedure symbols)))
-	 (syntax-forms (fold-right append '() (map analyze-syntax symbols))))
+  (let* ((procedures (apply append (map analyze-procedure symbols)))
+	 (syntax-forms (apply append (map analyze-syntax symbols))))
     (display
-	`(progn
-	  (scheme-add-keywords 'font-lock-builtin-face
-			       ',procedures)
-	  (scheme-add-keywords 'font-lock-keyword-face
-			       ',syntax-forms)))))
+      `(progn
+	(scheme-add-keywords 'font-lock-builtin-face ',procedures)
+	(scheme-add-keywords 'font-lock-keyword-face ',syntax-forms)))))
 
 (define (make-highlighting-rules libraries file)
   (let ((table (make-eq-hashtable)))
@@ -63,10 +62,12 @@
 	      libraries)
     (when (file-exists? file)
       (delete-file file))
-    (with-output-to-file file
-	(lambda ()
-	  (decide-highlighting-rules (vector->list
-				       (hashtable-keys table)))))))
+    (with-output-to-file
+      file
+      (lambda ()
+	(decide-highlighting-rules
+	 (vector->list
+	   (hashtable-keys table)))))))
 
 (define (run)
   (make-highlighting-rules default-libs "chezscheme.el"))
